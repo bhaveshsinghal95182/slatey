@@ -1,8 +1,9 @@
-"""Point OBS, Audacity and DaVinci Resolve at a project's folders, then open them."""
+"""Point OBS, recso, Audacity and DaVinci Resolve at a project's folders, then open them."""
 
 from __future__ import annotations
 
 import base64
+import getpass
 import hashlib
 import json
 import os
@@ -29,6 +30,9 @@ RESOLVE_PROJECTS = RESOLVE_DATA / "Resolve Project Library" / "Resolve Projects"
 # folder is added as a second location, purely for browsing.
 RESOLVE_SCRATCH = HOME / "Videos" / ".resolve"
 RESOLVE_SCRATCH_DIRS = ("CacheClip", ".gallery", "Resolve Project Backups")
+RECSO_APPIMAGES = HOME / "Applications"
+# Errors show in a toast, which cuts off long text.
+RECSO_API_OFF = "Turn on recso's Automation API (Settings ▸ Advanced), then press Open again."
 
 
 class AppError(Exception):
@@ -368,6 +372,87 @@ def open_resolve(project: core.Project) -> str:
     subprocess.run(["wl-copy", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return (f"Resolve is starting. In the Project Manager, create a new project named “{name}”. The name is on your "
             "clipboard, so just paste it. With that name, Open goes straight into the project from now on.")
+
+
+# --- recso -------------------------------------------------------------------------
+#
+# recso's Automation API is off until it's turned on in recso (Settings ▸ Advanced ▸
+# Automation API). It's JSON-RPC 2.0 over a Unix socket, one JSON object per line.
+# Settings set over it last until recso quits, so Open sets the folders every time.
+
+def recso_cli() -> list[str] | None:
+    """The command that runs recso-cli: the deb's, or an AppImage's --cli."""
+    if shutil.which("recso-cli"):
+        return ["recso-cli"]
+    app = os.environ.get("RECSO_APP")
+    if app and Path(app).is_file():
+        return [app, "--cli"]
+    images = [p for p in RECSO_APPIMAGES.glob("*.AppImage") if p.name.lower().startswith("recso")]
+    if images:
+        return [str(max(images, key=lambda p: p.stat().st_mtime)), "--cli"]
+    return None
+
+
+def recso_socket() -> Path:
+    if override := os.environ.get("RECSO_AUTOMATION_SOCKET"):
+        return Path(override)
+    if runtime := os.environ.get("XDG_RUNTIME_DIR"):
+        return Path(runtime) / "recso" / "api.sock"
+    return Path(f"/tmp/recso-{getpass.getuser()}") / "api.sock"
+
+
+def recso_call(method: str, params: dict | None = None) -> dict:
+    """One request; raises OSError when recso isn't running or its API is off."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+        sock.settimeout(10)
+        sock.connect(str(recso_socket()))
+        request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}
+        sock.sendall(json.dumps(request).encode() + b"\n")
+        buffer = b""
+        while True:
+            chunk = sock.recv(65536)
+            if not chunk:
+                raise ConnectionError("recso closed the connection")
+            buffer += chunk
+            while b"\n" in buffer:
+                line, buffer = buffer.split(b"\n", 1)
+                message = json.loads(line)
+                if message.get("id") != 1:
+                    continue
+                if "error" in message:
+                    raise AppError(f"recso: {message['error']['message']}")
+                return message["result"]
+
+
+def recso_running() -> bool:
+    return is_running("recso")
+
+
+def open_recso(project: core.Project) -> str:
+    cli = recso_cli()
+    if cli is None:
+        raise AppError("recso isn't installed: install its .deb, or put its AppImage in ~/Applications.")
+    recordings = project.path / "Recso"
+    footage = project.folder("Footage")
+    recordings.mkdir(parents=True, exist_ok=True)
+    footage.mkdir(parents=True, exist_ok=True)
+    try:
+        recso_call("api.version")
+    except OSError:
+        if recso_running():
+            raise AppError(RECSO_API_OFF) from None
+        # Starts recso with its window hidden and waits for the API. With the API
+        # off, recso opens its window as usual and this gives up after the timeout.
+        started = subprocess.run([*cli, "--launch", "--timeout", "20000", "status"],
+                                 capture_output=True, text=True, check=False)
+        if started.returncode == 3 and recso_running():
+            raise AppError(RECSO_API_OFF) from None
+        if started.returncode:
+            raise AppError(started.stderr.strip() or "recso didn't start.") from None
+    recso_call("settings.set", {"values": {"recording.outputDir": str(recordings),
+                                           "export.outputDir": str(footage)}})
+    recso_call("app.show")
+    return "recso is open. Recordings save to Recso, and exports to Media/Footage."
 
 
 # --- microphone ----------------------------------------------------------------------

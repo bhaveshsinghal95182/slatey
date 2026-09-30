@@ -159,13 +159,19 @@ class Window(Adw.ApplicationWindow):
         group = Adw.PreferencesGroup(
             title="Record and edit",
             description="Each app opens with its save folders already set to this project.")
-        for icon, title, subtitle, callback in (
-            ("com.obsproject.Studio", "OBS Studio", "Recordings save to Media/Footage", apps.open_obs),
+        rows = [("com.obsproject.Studio", "OBS Studio", "Recordings save to Media/Footage", apps.open_obs)]
+        # Only when recso is installed; Open explains it if its Automation API is off.
+        if apps.recso_cli():
+            rows.append(("recso", "recso", "Recordings save to Recso · exports save to Media/Footage", apps.open_recso))
+        rows += [
             ("audacity", "Audacity", "Projects save to Audacity · exports save to Media/Voiceover/Raw", apps.open_audacity),
             ("davinci-resolve", "DaVinci Resolve", "Opens straight into the Resolve project with this video's name",
              apps.open_resolve),
-        ):
+        ]
+        theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+        for icon, title, subtitle, callback in rows:
             row = Adw.ActionRow(title=title, subtitle=subtitle, subtitle_lines=2)
+            icon = icon if theme.has_icon(icon) else "media-record-symbolic"
             row.add_prefix(Gtk.Image(icon_name=icon, pixel_size=36))
             button = Gtk.Button(label="Open", valign=Gtk.Align.CENTER)
             button.connect("clicked", lambda _b, fn=callback: self._open_app(fn))
