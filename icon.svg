@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a8ff0"/>
+      <stop offset="1" stop-color="#1c5fc4"/>
+    </linearGradient>
+    <linearGradient id="folder" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e3ecf8"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="url(#bg)"/>
+  <!-- folder -->
+  <path d="M26 42a6 6 0 0 1 6-6h20l7 7h37a6 6 0 0 1 6 6v43a6 6 0 0 1-6 6H32a6 6 0 0 1-6-6z" fill="url(#folder)"/>
+  <!-- film strip edges -->
+  <g fill="#1c5fc4" opacity="0.18">
+    <rect x="32" y="54" width="6" height="5" rx="1"/>
+    <rect x="32" y="65" width="6" height="5" rx="1"/>
+    <rect x="32" y="76" width="6" height="5" rx="1"/>
+    <rect x="32" y="87" width="6" height="5" rx="1"/>
+    <rect x="90" y="54" width="6" height="5" rx="1"/>
+    <rect x="90" y="65" width="6" height="5" rx="1"/>
+    <rect x="90" y="76" width="6" height="5" rx="1"/>
+    <rect x="90" y="87" width="6" height="5" rx="1"/>
+  </g>
+  <!-- play button -->
+  <circle cx="64" cy="72" r="18" fill="#f0473c"/>
+  <path d="M58 63.5v17l14.5-8.5z" fill="#ffffff"/>
+</svg>
