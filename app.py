@@ -16,6 +16,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 
 import apps  # noqa: E402
 import core  # noqa: E402
+import cutter  # noqa: E402
 
 APP_ID = "local.descentkatil.VideoWorkflow"
 
@@ -38,6 +39,12 @@ def when(path: Path) -> str:
     return stamp.strftime("%H:%M today" if stamp.date() == datetime.now().date() else "%d %b %Y, %H:%M")
 
 
+def clock(seconds: float) -> str:
+    minutes, seconds = divmod(round(seconds), 60)
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}:{minutes:02}:{seconds:02}" if hours else f"{minutes}:{seconds:02}"
+
+
 def plain_row(title: str, subtitle: str = "") -> Adw.ActionRow:
     row = Adw.ActionRow(title=title, subtitle=subtitle)
     row.set_use_markup(False)
@@ -53,6 +60,7 @@ class Window(Adw.ApplicationWindow):
         self.project: core.Project | None = None
         self.voice_sources: list[Path] = []
         self.browsed_voice: Path | None = None
+        self.cut_sources: list[Path] = []
         self.file_rows: list[Gtk.Widget] = []
         self.expanded: set[str] = {"Footage"}
         self.busy = 0
@@ -129,6 +137,7 @@ class Window(Adw.ApplicationWindow):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=28,
                        margin_top=24, margin_bottom=36, margin_start=16, margin_end=16)
         page.append(self._build_apps_group())
+        page.append(self._build_cut_group())
         page.append(self._build_resolve_group())
         page.append(self._build_voice_group())
         self.files_group = Adw.PreferencesGroup(
@@ -178,6 +187,36 @@ class Window(Adw.ApplicationWindow):
             row.add_suffix(button)
             row.set_activatable_widget(button)
             group.add(row)
+        return group
+
+    def _build_cut_group(self) -> Gtk.Widget:
+        group = Adw.PreferencesGroup(
+            title="Cut pauses",
+            description="Shortens every pause in a recording and joins the rest into a new video "
+                        "next to it in Media/Footage. The original stays as it is.")
+        self.cut_model = Gtk.StringList()
+        self.cut_row = Adw.ComboRow(title="Recording", model=self.cut_model)
+        self.cut_row.connect("notify::selected", lambda *_: self._update_cut_subtitle())
+        group.add(self.cut_row)
+
+        self.min_pause_row = Adw.SpinRow.new_with_range(0.3, 3.0, 0.1)
+        self.min_pause_row.set_title("Cut pauses longer than (s)")
+        self.min_pause_row.set_subtitle("Shorter pauses are left alone")
+        self.min_pause_row.set_digits(1)
+        self.min_pause_row.set_value(0.5)
+        group.add(self.min_pause_row)
+
+        self.keep_pause_row = Adw.SpinRow.new_with_range(0.0, 1.0, 0.05)
+        self.keep_pause_row.set_title("Pause left in its place (s)")
+        self.keep_pause_row.set_subtitle("0 removes pauses completely; a little keeps speech from sounding rushed")
+        self.keep_pause_row.set_digits(2)
+        self.keep_pause_row.set_value(0.3)
+        group.add(self.keep_pause_row)
+
+        self.cut_button = Adw.ButtonRow(title="Create cut video", start_icon_name="edit-cut-symbolic")
+        self.cut_button.add_css_class("suggested-action")
+        self.cut_button.connect("activated", lambda *_: self._cut())
+        group.add(self.cut_button)
         return group
 
     def _build_resolve_group(self) -> Gtk.Widget:
@@ -310,6 +349,7 @@ class Window(Adw.ApplicationWindow):
         self.content_page.set_title(project.name)
         self.content_stack.set_visible_child_name("project")
         self._refresh_voice_sources()
+        self._refresh_cut_sources()
         self._refresh_files()
         self._refresh_banner()
 
@@ -341,6 +381,25 @@ class Window(Adw.ApplicationWindow):
             self.voice_row.set_subtitle(f"Exported {when(self.voice_sources[index])}")
         else:
             self.voice_row.set_subtitle("Export from Audacity and it shows up here")
+
+    def _refresh_cut_sources(self) -> None:
+        index = self.cut_row.get_selected()
+        previous = self.cut_sources[index] if index < len(self.cut_sources) else None
+        sources = self.project.files("Footage") if self.project else []
+        self.cut_sources = [p for p in sources if p.suffix.lower() in core.VIDEO_EXTS]
+        self.cut_model.splice(0, self.cut_model.get_n_items(), [p.name for p in self.cut_sources] or ["None yet"])
+        self.cut_button.set_sensitive(bool(self.cut_sources) and not self.busy)
+        if previous in self.cut_sources:
+            self.cut_row.set_selected(self.cut_sources.index(previous))
+        self._update_cut_subtitle()
+
+    def _update_cut_subtitle(self) -> None:
+        index = self.cut_row.get_selected()
+        if index < len(self.cut_sources):
+            path = self.cut_sources[index]
+            self.cut_row.set_subtitle(f"{core.human_size(path.stat().st_size)} · {when(path)}")
+        else:
+            self.cut_row.set_subtitle("Record with OBS and it shows up here")
 
     def _refresh_files(self) -> None:
         for row in self.file_rows:
@@ -382,6 +441,7 @@ class Window(Adw.ApplicationWindow):
         self.busy += 1
         self.spinner.set_visible(True)
         self.polish_row.set_sensitive(False)
+        self.cut_button.set_sensitive(False)
 
         def finish(result=None, error: Exception | None = None) -> bool:
             self.busy -= 1
@@ -488,6 +548,41 @@ class Window(Adw.ApplicationWindow):
             self.toast(f"Saved {output.name} to Media/Voiceover")
 
         self.run_job(lambda: core.polish_voiceover(source, project, preset, loudness), done)
+
+    def _cut(self) -> None:
+        index = self.cut_row.get_selected()
+        if not self.project or index >= len(self.cut_sources):
+            return
+        source = self.cut_sources[index]
+        output = core.unique_path(source.with_name(f"{source.stem}-cut.mp4"))
+        min_silence = round(self.min_pause_row.get_value(), 1)
+        keep_pause = round(self.keep_pause_row.get_value(), 2)
+        shown = -1
+
+        def show(fraction: float | None) -> bool:
+            self.cut_button.set_title("Create cut video" if fraction is None
+                                      else f"Cutting {source.name}… {round(fraction * 100)}%")
+            return False
+
+        def progress(fraction: float) -> None:
+            nonlocal shown
+            if round(fraction * 100) != shown:
+                shown = round(fraction * 100)
+                GLib.idle_add(show, fraction)
+
+        def done(plan: cutter.CutPlan) -> None:
+            self.expanded.add("Footage")
+            self.toast(f"Saved {output.name} · {clock(plan.source_duration)} → {clock(plan.kept)}", timeout=8)
+
+        def work() -> cutter.CutPlan:
+            try:
+                return cutter.cut_silences(source, output, min_silence=min_silence,
+                                           keep_pause=keep_pause, progress=progress)
+            finally:
+                GLib.idle_add(show, None)
+
+        self.toast(f"Finding pauses in {source.name}…", timeout=3)
+        self.run_job(work, done)
 
     def _move_loose_recordings(self) -> None:
         loose = core.loose_recordings()

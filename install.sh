@@ -12,13 +12,13 @@ DESKTOP="$DATA/applications/$APP_ID.desktop"
 ICON="$DATA/icons/hicolor/scalable/apps/$APP_ID.svg"
 PINNED="${XDG_CACHE_HOME:-$HOME/.cache}/nwg-dock-pinned"
 
-command -v ffmpeg >/dev/null || echo "warning: ffmpeg is missing; Polish voiceover needs it" >&2
+command -v ffmpeg >/dev/null || echo "warning: ffmpeg is missing; Polish voiceover and Cut pauses need it" >&2
 python3 -c 'import gi; gi.require_version("Adw", "1"); from gi.repository import Adw' \
   || { echo "error: needs python-gobject and libadwaita" >&2; exit 1; }
 
 # App files
 mkdir -p "$DEST"
-install -m 644 "$SRC"/app.py "$SRC"/apps.py "$SRC"/core.py "$DEST"/
+install -m 644 "$SRC"/app.py "$SRC"/apps.py "$SRC"/core.py "$SRC"/cutter.py "$DEST"/
 rm -f "$DEST/resolve_sync.py" "$DEST/resolve_sync.lua"
 rm -rf "$DEST/__pycache__"
 python3 -m compileall -q "$DEST"
