@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Video Workflow: one folder per video, with OBS, Audacity and Resolve pointed at it."""
+"""Slatey: one folder per video, with OBS, Audacity and Resolve pointed at it."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import apps  # noqa: E402
 import core  # noqa: E402
 import cutter  # noqa: E402
 
-APP_ID = "local.descentkatil.VideoWorkflow"
+APP_ID = "io.github.bhaveshsinghal95182.Slatey"
 
 # (folder key, label, icon) in the order they appear under Files.
 FILE_SECTIONS = (
@@ -53,7 +53,7 @@ def plain_row(title: str, subtitle: str = "") -> Adw.ActionRow:
 
 class Window(Adw.ApplicationWindow):
     def __init__(self, app: Adw.Application) -> None:
-        super().__init__(application=app, title="Video Workflow")
+        super().__init__(application=app, title="Slatey")
         self.set_default_size(1120, 800)
         self.set_size_request(360, 480)
         self.projects: list[core.Project] = []
@@ -93,7 +93,7 @@ class Window(Adw.ApplicationWindow):
         menu = Gio.Menu()
         menu.append("Open projects folder", "app.open-root")
         menu.append("Preferences", "app.preferences")
-        menu.append("About Video Workflow", "app.about")
+        menu.append("About Slatey", "app.about")
         header.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu, tooltip_text="Menu"))
         view.add_top_bar(header)
 
@@ -115,7 +115,7 @@ class Window(Adw.ApplicationWindow):
     def _build_content(self) -> Gtk.Widget:
         view = Adw.ToolbarView()
         header = Adw.HeaderBar()
-        self.window_title = Adw.WindowTitle(title="Video Workflow")
+        self.window_title = Adw.WindowTitle(title="Slatey")
         header.set_title_widget(self.window_title)
         self.spinner = Adw.Spinner(visible=False, tooltip_text="Working…")
         header.pack_start(self.spinner)
@@ -333,9 +333,9 @@ class Window(Adw.ApplicationWindow):
         self.project = project
         self.folder_button.set_sensitive(project is not None)
         if project is None:
-            self.window_title.set_title("Video Workflow")
+            self.window_title.set_title("Slatey")
             self.window_title.set_subtitle("")
-            self.content_page.set_title("Video Workflow")
+            self.content_page.set_title("Slatey")
             self.content_stack.set_visible_child_name("empty")
             self.banner.set_revealed(False)
             return
@@ -734,7 +734,7 @@ class Application(Adw.Application):
         window.present()
 
     def _about(self) -> None:
-        about = Adw.AboutDialog(application_name="Video Workflow", application_icon=APP_ID,
+        about = Adw.AboutDialog(application_name="Slatey", application_icon=APP_ID,
                                 developer_name="descentkatil", version="2.0",
                                 comments="One folder per video, with OBS, Audacity and DaVinci Resolve pointed at it.")
         about.present(self.window)

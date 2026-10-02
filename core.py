@@ -28,7 +28,8 @@ from pathlib import Path
 HOME = Path.home()
 VIDEOS = HOME / "Videos"
 PROJECTS = VIDEOS / "Projects"
-STATE_FILE = HOME / ".config" / "video-workflow" / "state.json"
+STATE_FILE = HOME / ".config" / "slatey" / "state.json"
+OLD_STATE_FILE = HOME / ".config" / "video-workflow" / "state.json"  # before the rename to Slatey
 MARKER = ".videoworkflow.json"
 
 MEDIA = "Media"
@@ -151,10 +152,12 @@ def set_active_project(project: Project) -> None:
 
 
 def read_state() -> dict:
-    try:
-        return json.loads(STATE_FILE.read_text())
-    except (OSError, ValueError):
-        return {}
+    for path in (STATE_FILE, OLD_STATE_FILE):
+        try:
+            return json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+    return {}
 
 
 # --- importing media ----------------------------------------------------------
