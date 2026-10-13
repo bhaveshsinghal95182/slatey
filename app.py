@@ -14,7 +14,7 @@ gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 
-import apps  # noqa: E402
+import integrations  # noqa: E402
 import core  # noqa: E402
 import cutter  # noqa: E402
 
@@ -120,7 +120,7 @@ class Window(Adw.ApplicationWindow):
         self.spinner = Adw.Spinner(visible=False, tooltip_text="Working…")
         header.pack_start(self.spinner)
         self.folder_button = Gtk.Button(icon_name="folder-open-symbolic", tooltip_text="Open project folder")
-        self.folder_button.connect("clicked", lambda *_: self.project and apps.open_path(self.project.path))
+        self.folder_button.connect("clicked", lambda *_: self.project and integrations.open_path(self.project.path))
         header.pack_end(self.folder_button)
         refresh = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Refresh (F5)", action_name="win.refresh")
         header.pack_end(refresh)
@@ -168,14 +168,14 @@ class Window(Adw.ApplicationWindow):
         group = Adw.PreferencesGroup(
             title="Record and edit",
             description="Each app opens with its save folders already set to this project.")
-        rows = [("com.obsproject.Studio", "OBS Studio", "Recordings save to Media/Footage", apps.open_obs)]
+        rows = [("com.obsproject.Studio", "OBS Studio", "Recordings save to Media/Footage", integrations.open_obs)]
         # Only when recso is installed; Open explains it if its Automation API is off.
-        if apps.recso_cli():
-            rows.append(("recso", "recso", "Recordings save to Recso · exports save to Media/Footage", apps.open_recso))
+        if integrations.recso_cli():
+            rows.append(("recso", "recso", "Recordings save to Recso · exports save to Media/Footage", integrations.open_recso))
         rows += [
-            ("audacity", "Audacity", "Projects save to Audacity · exports save to Media/Voiceover/Raw", apps.open_audacity),
+            ("audacity", "Audacity", "Projects save to Audacity · exports save to Media/Voiceover/Raw", integrations.open_audacity),
             ("davinci-resolve", "DaVinci Resolve", "Opens straight into the Resolve project with this video's name",
-             apps.open_resolve),
+             integrations.open_resolve),
         ]
         theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
         for icon, title, subtitle, callback in rows:
@@ -420,7 +420,7 @@ class Window(Adw.ApplicationWindow):
             row.add_prefix(Gtk.Image(icon_name=icon))
             open_folder = Gtk.Button(icon_name="folder-open-symbolic", valign=Gtk.Align.CENTER,
                                      css_classes=["flat"], tooltip_text=f"Open {core.FOLDERS[key]}")
-            open_folder.connect("clicked", lambda _b, k=key: apps.open_path(self.project.folder(k)))
+            open_folder.connect("clicked", lambda _b, k=key: integrations.open_path(self.project.folder(k)))
             row.add_suffix(open_folder)
             row.set_enable_expansion(bool(files))
             row.set_expanded(bool(files) and key in self.expanded)
@@ -428,7 +428,7 @@ class Window(Adw.ApplicationWindow):
                 item = plain_row(path.name, f"{core.human_size(path.stat().st_size)} · {when(path)}")
                 item.set_activatable(True)
                 item.add_suffix(Gtk.Image(icon_name="adw-external-link-symbolic", css_classes=["dim-label"]))
-                item.connect("activated", lambda _r, p=path: apps.open_path(p))
+                item.connect("activated", lambda _r, p=path: integrations.open_path(p))
                 row.add_row(item)
             if len(files) > MAX_FILE_ROWS:
                 row.add_row(plain_row(f"…and {len(files) - MAX_FILE_ROWS} more", "Open the folder to see everything"))
@@ -661,13 +661,13 @@ class Window(Adw.ApplicationWindow):
         gain = Adw.SpinRow.new_with_range(1.0, 1.8, 0.1)
         gain.set_title("Recording gain")
         gain.set_digits(1)
-        gain.set_value(apps.mic_gain() or 1.4)
+        gain.set_value(integrations.mic_gain() or 1.4)
         mic.add(gain)
         apply = Adw.ButtonRow(title="Apply gain")
 
         def apply_gain(*_) -> None:
             try:
-                apps.set_mic_gain(round(gain.get_value(), 1))
+                integrations.set_mic_gain(round(gain.get_value(), 1))
                 dialog.add_toast(Adw.Toast(title=f"Mic gain set to {gain.get_value():.1f}×"))
             except Exception as exc:
                 dialog.add_toast(Adw.Toast(title=GLib.markup_escape_text(str(exc))))
@@ -678,15 +678,15 @@ class Window(Adw.ApplicationWindow):
 
         resolve = Adw.PreferencesGroup(title="DaVinci Resolve")
         resolve.add(plain_row("Projects folder in Media Storage",
-                              "Set" if apps.resolve_storage_configured()
+                              "Set" if integrations.resolve_storage_configured()
                               else "Added the next time you open Resolve from here while it's closed."))
-        resolve.add(plain_row("Resolve's cache and gallery stills", str(apps.RESOLVE_SCRATCH)))
+        resolve.add(plain_row("Resolve's cache and gallery stills", str(integrations.RESOLVE_SCRATCH)))
         page.add(resolve)
 
         folders = Adw.PreferencesGroup(title="Folders")
         root = plain_row("Projects", str(core.PROJECTS))
         button = Gtk.Button(icon_name="folder-open-symbolic", valign=Gtk.Align.CENTER, css_classes=["flat"])
-        button.connect("clicked", lambda *_: apps.open_path(core.PROJECTS))
+        button.connect("clicked", lambda *_: integrations.open_path(core.PROJECTS))
         root.add_suffix(button)
         folders.add(root)
         page.add(folders)
@@ -704,7 +704,7 @@ class Application(Adw.Application):
         for name, callback, accels in (
             ("new-project", lambda: self.window.new_project(), ["<Control>n"]),
             ("preferences", lambda: self.window.preferences(), ["<Control>comma"]),
-            ("open-root", lambda: apps.open_path(core.PROJECTS), []),
+            ("open-root", lambda: integrations.open_path(core.PROJECTS), []),
             ("about", self._about, []),
             ("quit", self.quit, ["<Control>q"]),
         ):
@@ -719,7 +719,7 @@ class Application(Adw.Application):
     @staticmethod
     def _prepare_resolve() -> None:
         try:
-            apps.prepare_resolve()
+            integrations.prepare_resolve()
         except OSError:
             pass  # retried when Resolve is opened from the app
 

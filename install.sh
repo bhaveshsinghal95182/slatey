@@ -27,8 +27,8 @@ fi
 
 # App files
 mkdir -p "$DEST"
-install -m 644 "$SRC"/app.py "$SRC"/apps.py "$SRC"/core.py "$SRC"/cutter.py "$DEST"/
-rm -f "$DEST/resolve_sync.py" "$DEST/resolve_sync.lua"
+install -m 644 "$SRC"/app.py "$SRC"/integrations.py "$SRC"/core.py "$SRC"/cutter.py "$DEST"/
+rm -f "$DEST/apps.py" "$DEST/resolve_sync.py" "$DEST/resolve_sync.lua"
 rm -rf "$DEST/__pycache__"
 python3 -m compileall -q "$DEST"
 
